@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { client } from '../../api/client'
-import { ExceptionRecord, User, Entity, RoutingRule } from '../../types'
+import { ExceptionRecord, User, Entity, RoutingRule, GSTReconciliationRun, MonthEndPeriod } from '../../types'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import SeverityBadge from '../../components/SeverityBadge'
 
@@ -18,6 +18,8 @@ export default function AdminDashboard({ entityId, user }: Props) {
   const [djangoHealth, setDjangoHealth] = useState<'live' | 'offline'>('live')
   const [fastapiHealth, setFastapiHealth] = useState<'checking' | 'live' | 'offline'>('checking')
   const [exporting, setExporting] = useState(false)
+  const [latestGstRun, setLatestGstRun] = useState<GSTReconciliationRun | null>(null)
+  const [latestClosePeriod, setLatestClosePeriod] = useState<MonthEndPeriod | null>(null)
 
   const handleExportPDF = async () => {
     setExporting(true)
@@ -60,6 +62,25 @@ export default function AdminDashboard({ entityId, user }: Props) {
 
       const ruleData = await client.get('/routing/rules/')
       setRules(Array.isArray(ruleData) ? ruleData : ruleData.results || [])
+
+      // Fetch GST Runs
+      const gstRuns = await client.get(`/gst/?entity=${entityId}`)
+      const runsList = Array.isArray(gstRuns) ? gstRuns : gstRuns.results || []
+      if (runsList.length > 0) {
+        setLatestGstRun(runsList[0])
+      } else {
+        setLatestGstRun(null)
+      }
+
+      // Fetch Close Periods
+      const closePeriods = await client.get(`/close/?entity=${entityId}`)
+      const periodsList = Array.isArray(closePeriods) ? closePeriods : closePeriods.results || []
+      if (periodsList.length > 0) {
+        const detail = await client.get(`/close/${periodsList[0].id}/`)
+        setLatestClosePeriod(detail)
+      } else {
+        setLatestClosePeriod(null)
+      }
       
       setDjangoHealth('live')
     } catch (err) {
@@ -231,6 +252,101 @@ export default function AdminDashboard({ entityId, user }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Compliance & Close Status Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
+        {/* GST ITC At Risk Card */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(59, 78, 255, 0.05)', filter: 'blur(20px)' }} />
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST Compliance Status</span>
+            <span style={{ fontSize: '11px', background: '#e0e7ff', color: '#4338ca', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>Active Period</span>
+          </div>
+
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>GST Input Tax Credit (ITC) At Risk</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: '#dc2626', marginTop: '4px', letterSpacing: '-0.5px' }}>
+              ₹{latestGstRun ? parseFloat(latestGstRun.itc_at_risk).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '0.00'}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: '12px', fontSize: '12px' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>
+              Latest Run: {latestGstRun ? `${latestGstRun.tax_period} (${latestGstRun.status.toUpperCase()})` : 'No runs executed'}
+            </span>
+            <Link to="/gst" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>
+              Analyze GST →
+            </Link>
+          </div>
+        </div>
+
+        {/* Month-End Close Progress Card */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.05)', filter: 'blur(20px)' }} />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Month-End Close Progress</span>
+            <span style={{
+              fontSize: '11px',
+              background: latestClosePeriod?.status === 'closed' ? '#d1fae5' : '#fef3c7',
+              color: latestClosePeriod?.status === 'closed' ? '#065f46' : '#d97706',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              fontWeight: 600,
+              textTransform: 'uppercase'
+            }}>
+              {latestClosePeriod ? latestClosePeriod.status.replace('_', ' ') : 'Not Started'}
+            </span>
+          </div>
+
+          {latestClosePeriod ? (
+            <div style={{ marginTop: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Period: <b>{latestClosePeriod.period}</b></span>
+                <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text)' }}>
+                  {latestClosePeriod.items && latestClosePeriod.items.length > 0
+                    ? Math.round((latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100)
+                    : 0}%
+                </span>
+              </div>
+              
+              <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', margin: '6px 0 10px 0' }}>
+                <div style={{
+                  width: `${latestClosePeriod.items && latestClosePeriod.items.length > 0
+                    ? (latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100
+                    : 0}%`,
+                  height: '100%',
+                  background: '#10b981',
+                  borderRadius: '3px',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', gap: '8px' }}>
+                <span>Completed: <b>{latestClosePeriod.items?.filter(it => it.is_complete).length}</b></span>
+                <span>•</span>
+                <span>Critical Remaining: <b style={{ color: latestClosePeriod.items?.filter(it => it.is_critical && !it.is_complete).length ? '#dc2626' : 'inherit' }}>
+                  {latestClosePeriod.items?.filter(it => it.is_critical && !it.is_complete).length}
+                </b></span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: '12px', color: 'var(--color-text-muted)', fontSize: '13px', fontStyle: 'italic' }}>
+              No active month-end close checklist generated.
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: '12px', fontSize: '12px' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>
+              Checklist Tasks: {latestClosePeriod?.items?.length || 0} total items
+            </span>
+            <Link to="/close" style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>
+              Open Checklist →
+            </Link>
+          </div>
         </div>
       </div>
 

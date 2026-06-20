@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { client } from '../../api/client'
-import { ExceptionRecord, AuditLog } from '../../types'
+import { ExceptionRecord, AuditLog, MonthEndPeriod } from '../../types'
 import StatusChip from '../../components/StatusChip'
 import SeverityBadge from '../../components/SeverityBadge'
 
@@ -14,6 +14,7 @@ export default function ApproverDashboard({ entityId, user }: Props) {
   const [exceptions, setExceptions] = useState<ExceptionRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [latestClosePeriod, setLatestClosePeriod] = useState<MonthEndPeriod | null>(null)
 
   const handleExportPDF = async () => {
     setExporting(true)
@@ -45,6 +46,16 @@ export default function ApproverDashboard({ entityId, user }: Props) {
       const data = await client.get(`/exceptions/?entity=${entityId}`)
       const list = Array.isArray(data) ? data : data.results || []
       setExceptions(list)
+
+      // Fetch close periods
+      const closePeriods = await client.get(`/close/?entity=${entityId}`)
+      const periodsList = Array.isArray(closePeriods) ? closePeriods : closePeriods.results || []
+      if (periodsList.length > 0) {
+        const detail = await client.get(`/close/${periodsList[0].id}/`)
+        setLatestClosePeriod(detail)
+      } else {
+        setLatestClosePeriod(null)
+      }
     } catch (err) {
       console.error('Failed to load approver exceptions', err)
     } finally {
@@ -117,7 +128,7 @@ export default function ApproverDashboard({ entityId, user }: Props) {
       </div>
 
       {/* Stats row */}
-      <div className="grid-2">
+      <div className="grid-3">
         <div className="stat-card" style={{ borderLeft: '4px solid var(--color-resolved)' }}>
           <div className="stat-label">Pending My Approval</div>
           <div className="stat-value">{pendingApprovals.length}</div>
@@ -128,6 +139,70 @@ export default function ApproverDashboard({ entityId, user }: Props) {
           <div className="stat-label">Escalated to Me</div>
           <div className="stat-value">{escalatedQueue.length}</div>
           <div className="stat-sub">Assigned open cases requiring senior review</div>
+        </div>
+
+        {/* Month-End Close Checklist Status Card */}
+        <div className="stat-card" style={{ borderLeft: '4px solid #10b981', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '120px' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="stat-label">Month-End Close Progress</span>
+              <span style={{
+                fontSize: '10px',
+                background: latestClosePeriod?.status === 'closed' ? '#d1fae5' : '#fef3c7',
+                color: latestClosePeriod?.status === 'closed' ? '#065f46' : '#d97706',
+                padding: '1px 6px',
+                borderRadius: '4px',
+                fontWeight: 600,
+                textTransform: 'uppercase'
+              }}>
+                {latestClosePeriod ? latestClosePeriod.status.replace('_', ' ') : 'Not Started'}
+              </span>
+            </div>
+            
+            {latestClosePeriod ? (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                  <span>Period: <b>{latestClosePeriod.period}</b></span>
+                  <span style={{ fontWeight: 700 }}>
+                    {latestClosePeriod.items && latestClosePeriod.items.length > 0
+                      ? Math.round((latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                
+                <div style={{ width: '100%', height: '4px', background: '#cbd5e1', borderRadius: '2px', overflow: 'hidden', margin: '4px 0' }}>
+                  <div style={{
+                    width: `${latestClosePeriod.items && latestClosePeriod.items.length > 0
+                      ? (latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100
+                      : 0}%`,
+                    height: '100%',
+                    background: '#10b981',
+                    borderRadius: '2px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+                
+                <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                  <span>Completed: <b>{latestClosePeriod.items?.filter(it => it.is_complete).length}</b> / <b>{latestClosePeriod.items?.length}</b></span>
+                  {latestClosePeriod.items?.filter(it => it.is_critical && !it.is_complete).length ? (
+                    <span style={{ color: '#dc2626', fontWeight: 600 }}>
+                      ⚠️ {latestClosePeriod.items?.filter(it => it.is_critical && !it.is_complete).length} Critical
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: '6px' }}>
+                No active checklist generated.
+              </div>
+            )}
+          </div>
+          
+          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '6px', marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}>
+            <Link to="/close" style={{ color: 'var(--color-primary)', fontSize: '11px', fontWeight: 600, textDecoration: 'none' }}>
+              View Checklist →
+            </Link>
+          </div>
         </div>
       </div>
 

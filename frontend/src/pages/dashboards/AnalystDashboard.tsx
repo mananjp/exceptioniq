@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { client } from '../../api/client'
-import { ExceptionRecord } from '../../types'
+import { ExceptionRecord, MonthEndPeriod } from '../../types'
 import StatusChip from '../../components/StatusChip'
 import SeverityBadge from '../../components/SeverityBadge'
 import SlaCountdown from '../../components/SlaCountdown'
@@ -14,6 +14,7 @@ interface Props {
 export default function AnalystDashboard({ entityId, user }: Props) {
   const [exceptions, setExceptions] = useState<ExceptionRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [latestClosePeriod, setLatestClosePeriod] = useState<MonthEndPeriod | null>(null)
 
   const fetchData = async () => {
     if (!entityId || !user) return
@@ -23,6 +24,16 @@ export default function AnalystDashboard({ entityId, user }: Props) {
       const data = await client.get(`/exceptions/?entity=${entityId}`)
       const list = Array.isArray(data) ? data : data.results || []
       setExceptions(list)
+
+      // Fetch latest close period checklist
+      const closePeriods = await client.get(`/close/?entity=${entityId}`)
+      const periodsList = Array.isArray(closePeriods) ? closePeriods : closePeriods.results || []
+      if (periodsList.length > 0) {
+        const detail = await client.get(`/close/${periodsList[0].id}/`)
+        setLatestClosePeriod(detail)
+      } else {
+        setLatestClosePeriod(null)
+      }
     } catch (err) {
       console.error('Failed to load analyst exceptions', err)
     } finally {
@@ -78,6 +89,10 @@ export default function AnalystDashboard({ entityId, user }: Props) {
     e.sla_deadline && new Date(e.sla_deadline).getTime() < now
   ).length
 
+  const myPendingChecklistCount = latestClosePeriod?.items?.filter(
+    item => item.assigned_to?.id === user.id && !item.is_complete
+  ).length || 0
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
@@ -122,6 +137,47 @@ export default function AnalystDashboard({ entityId, user }: Props) {
             }}
           >
             Investigate Next
+          </Link>
+        </div>
+      )}
+
+      {/* Month-End Close Alert Band */}
+      {myPendingChecklistCount > 0 && (
+        <div style={{
+          background: '#e0e7ff',
+          borderLeft: '4px solid #4F46E5',
+          borderRadius: '4px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>⏳</span>
+            <div>
+              <div style={{ fontWeight: 600, color: '#312e81', fontSize: '14px' }}>
+                Month-End Close Action Required: You have {myPendingChecklistCount} pending checklist task(s)
+              </div>
+              <div style={{ color: '#3730a3', fontSize: '12px', marginTop: '2px' }}>
+                Please complete these checklist items for period {latestClosePeriod?.period} to ensure timely compliance.
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/close"
+            className="btn"
+            style={{
+              background: '#4F46E5',
+              color: '#ffffff',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              borderRadius: '4px'
+            }}
+          >
+            View My Tasks 🔗
           </Link>
         </div>
       )}

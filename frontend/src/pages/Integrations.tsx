@@ -10,6 +10,14 @@ interface AppContextType {
 export default function Integrations() {
   const { entityId } = useOutletContext<AppContextType>()
 
+  const [entity, setEntity] = useState<Entity | null>(null)
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  const toast = {
+    success: (msg: string) => setNotification({ message: msg, type: 'success' }),
+    error: (msg: string) => setNotification({ message: msg, type: 'error' })
+  }
+
   // Tally inputs
   const [tallyHost, setTallyHost] = useState('localhost:9000')
   const [tallyCompany, setTallyCompany] = useState('')
@@ -17,31 +25,59 @@ export default function Integrations() {
   const [tallyTo, setTallyTo] = useState('')
   const [tallySyncing, setTallySyncing] = useState(false)
 
-  // Zoho inputs
-  const [zohoOrgId, setZohoOrgId] = useState('')
-  const [zohoRefreshToken, setZohoRefreshToken] = useState('')
+  // Zoho sync date range
   const [zohoFrom, setZohoFrom] = useState('')
   const [zohoTo, setZohoTo] = useState('')
-  const [zohoConnecting, setZohoConnecting] = useState(false)
   const [zohoSyncing, setZohoSyncing] = useState(false)
 
   // Jobs history list
   const [jobs, setJobs] = useState<SyncJob[]>([])
   const [loadingJobs, setLoadingJobs] = useState(false)
 
+  // Auto-dismiss notification toast
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
+  // Handle Zoho callback parameters from redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const zohoParam = params.get('zoho')
+    const reason = params.get('reason')
+    
+    if (zohoParam) {
+      if (zohoParam === 'connected') {
+        toast.success('Zoho Books connected successfully!')
+        fetchEntityDetails()
+      } else if (zohoParam === 'denied') {
+        toast.error('Zoho connection cancelled.')
+      } else if (zohoParam === 'error') {
+        let errorMsg = 'Zoho connection failed. Please try again.'
+        if (reason === 'no_refresh_token') {
+          errorMsg = 'Zoho connection failed: No refresh token returned.'
+        } else if (reason === 'entity_not_found') {
+          errorMsg = 'Zoho connection failed: Entity not found.'
+        } else if (reason === 'token_exchange_failed') {
+          errorMsg = 'Zoho connection failed: Token exchange failed.'
+        }
+        toast.error(errorMsg)
+      }
+      
+      // Clean query params
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [entityId])
+
   // Load details of the entity (like current company name / connected state)
   const fetchEntityDetails = async () => {
     if (!entityId) return
     try {
       const ent: Entity = await client.get(`/entities/${entityId}/`)
+      setEntity(ent)
       setTallyCompany(ent.tally_company_name || '')
-      setZohoOrgId(ent.zoho_org_id || '')
-      // Don't pre-populate refresh token for safety, but we can set placeholder if present
-      if (ent.zoho_refresh_token) {
-        setZohoRefreshToken('••••••••••••••••••••••••••••••••')
-      } else {
-        setZohoRefreshToken('')
-      }
     } catch (err) {
       console.error(err)
     }
@@ -101,27 +137,23 @@ export default function Integrations() {
     }
   }
 
-  // Save Zoho credentials & Connect
-  const handleZohoConnect = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!entityId || !zohoOrgId || !zohoRefreshToken) {
-      alert('Organization ID and Refresh Token are required.')
-      return
-    }
+  const isZohoConnected = !!entity?.zoho_refresh_token
 
-    setZohoConnecting(true)
+  // Connect Zoho Books via OAuth flow
+  const handleConnectZoho = () => {
+    if (!entityId) return
+    window.location.href = `/api/v1/integrations/zoho/connect/?entity_id=${entityId}`
+  }
+
+  // Disconnect Zoho Books connection
+  const handleDisconnectZoho = async () => {
+    if (!entityId) return
     try {
-      const res = await client.post('/integrations/zoho/connect/', {
-        entity_id: entityId,
-        zoho_org_id: zohoOrgId,
-        zoho_refresh_token: zohoRefreshToken === '••••••••••••••••••••••••••••••••' ? undefined : zohoRefreshToken
-      })
-      alert(res.message || 'Zoho Books connection successful!')
+      await client.post('/integrations/zoho/disconnect/', { entity_id: entityId })
+      toast.success('Zoho Books disconnected.')
       fetchEntityDetails()
     } catch (err: any) {
-      alert(`Zoho Connection Failed: ${err.message || err}`)
-    } finally {
-      setZohoConnecting(false)
+      toast.error(`Failed to disconnect Zoho: ${err.message || err}`)
     }
   }
 
@@ -234,77 +266,124 @@ export default function Integrations() {
             </div>
           </div>
 
-          {/* Zoho Connect Form */}
-          <div style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '20px' }}>
-            <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '12px' }}>Connection Settings</h3>
-            <form onSubmit={handleZohoConnect} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="grid-2" style={{ gap: '12px' }}>
-                <div className="form-group">
-                  <label className="form-label">Organization ID</label>
-                  <input
-                    type="text"
-                    value={zohoOrgId}
-                    onChange={(e) => setZohoOrgId(e.target.value)}
-                    placeholder="e.g. 6007501..."
-                    className="form-input"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">OAuth Refresh Token</label>
-                  <input
-                    type="password"
-                    value={zohoRefreshToken}
-                    onChange={(e) => setZohoRefreshToken(e.target.value)}
-                    placeholder="Zoho OAuth Refresh Token"
-                    className="form-input"
-                  />
-                </div>
+          {/* Zoho Connection Status Block */}
+          {isZohoConnected ? (
+            <div style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '8px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{
+                  background: '#d1fae5',
+                  color: '#065f46',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase'
+                }}>
+                  ✅ Connected
+                </span>
+                <button
+                  onClick={handleDisconnectZoho}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    color: '#dc2626',
+                    borderColor: '#fca5a5',
+                    background: 'none',
+                    borderStyle: 'solid',
+                    borderWidth: '1px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Disconnect
+                </button>
               </div>
+              <div style={{ fontSize: '12px', color: '#1e293b' }}>
+                <span>Organization ID: </span>
+                <strong style={{ fontFamily: 'monospace', fontSize: '13px' }}>{entity?.zoho_org_id || 'Not Available'}</strong>
+              </div>
+            </div>
+          ) : (
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase'
+                }}>
+                  Not Connected
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                Connect your Zoho Books cloud organization using secure OAuth 2.0 protocol to auto-fetch transaction bank statements.
+              </p>
               <button
-                type="submit"
-                className="btn btn-secondary"
-                style={{ width: '100%' }}
-                disabled={zohoConnecting}
+                onClick={handleConnectZoho}
+                className="btn btn-primary"
+                style={{ width: '100%', marginTop: '4px' }}
               >
-                {zohoConnecting ? 'Verifying & Saving credentials...' : '🔗 Save & Test Connection'}
+                🔗 Connect Zoho Books
               </button>
-            </form>
-          </div>
+            </div>
+          )}
 
           {/* Zoho Sync Form */}
-          <div>
-            <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '12px' }}>Sync Dates range</h3>
-            <form onSubmit={handleZohoSync} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="grid-2" style={{ gap: '12px' }}>
-                <div className="form-group">
-                  <label className="form-label">From Date</label>
-                  <input
-                    type="date"
-                    value={zohoFrom}
-                    onChange={(e) => setZohoFrom(e.target.value)}
-                    className="form-input"
-                  />
+          {isZohoConnected && (
+            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '20px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '12px' }}>Sync Dates range</h3>
+              <form onSubmit={handleZohoSync} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="grid-2" style={{ gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label">From Date</label>
+                    <input
+                      type="date"
+                      value={zohoFrom}
+                      onChange={(e) => setZohoFrom(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">To Date</label>
+                    <input
+                      type="date"
+                      value={zohoTo}
+                      onChange={(e) => setZohoTo(e.target.value)}
+                      className="form-input"
+                    />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">To Date</label>
-                  <input
-                    type="date"
-                    value={zohoTo}
-                    onChange={(e) => setZohoTo(e.target.value)}
-                    className="form-input"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: '100%' }}
-                disabled={zohoSyncing}
-              >
-                {zohoSyncing ? 'Syncing Zoho Books transactions...' : '⚡ Pull Zoho Bank Transactions'}
-              </button>
-            </form>
-          </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ width: '100%' }}
+                  disabled={zohoSyncing}
+                >
+                  {zohoSyncing ? 'Syncing Zoho Books transactions...' : '⚡ Pull Zoho Bank Transactions'}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
 
@@ -376,6 +455,52 @@ export default function Integrations() {
           </div>
         )}
       </div>
+
+      {/* Notification Toast */}
+      {notification && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 9999,
+          background: notification.type === 'success' ? '#10b981' : '#ef4444',
+          color: '#ffffff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontWeight: 600,
+          fontSize: '14px',
+          animation: 'slideIn 0.3s ease',
+          transition: 'all 0.3s ease'
+        }}>
+          <span>{notification.type === 'success' ? '✅' : '❌'}</span>
+          <span>{notification.message}</span>
+          <button 
+            onClick={() => setNotification(null)} 
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#ffffff',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0 4px',
+              marginLeft: '12px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
