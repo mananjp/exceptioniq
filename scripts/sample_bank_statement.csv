@@ -1,0 +1,4 @@
+txn_date,amount,reference,counterparty,narration
+2026-06-01,1000.00,INV100,Vendor A,Payment A
+2026-06-02,2100.00,INV200,Vendor B,Payment B mismatch
+2026-06-04,4000.00,INV400,Vendor D,Missing ledger

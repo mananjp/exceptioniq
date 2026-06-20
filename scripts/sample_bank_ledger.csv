@@ -1,0 +1,4 @@
+txn_date,amount,reference,counterparty,account_type
+2026-06-01,1000.00,INV100,Vendor A,bank
+2026-06-02,2000.00,INV200,Vendor B,bank
+2026-06-03,3000.00,INV300,Vendor C,bank

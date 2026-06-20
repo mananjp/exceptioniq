@@ -1,0 +1,54 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: exceptioniq
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py seed_db &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  ai_service:
+    build: ./ai_service
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./ai_service:/app
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+
+  frontend:
+    build: ./frontend
+    command: npm run dev -- --host
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

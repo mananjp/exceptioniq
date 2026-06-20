@@ -1,0 +1,97 @@
+# Implementation Plan — ExceptionIQ v3 MVP Build
+
+Build a fully functional ExceptionIQ application using the modular monolith setup (Django + React + FastAPI + Postgres). The focus is on functionality and making the MVP highly interactive and testable. Notifications are scraped for now.
+
+## User Review Required
+
+> [!IMPORTANT]
+> - **Database Auto-Seeding**: A custom seed script (`seed_db`) will run on startup in `docker-compose.yml`. It sets up a default entity (`Acme Corporation`), users for each role (`admin`, `analyst`, `approver`, `manager` - all with password same as username), and standard routing rules.
+> - **User Switcher**: To easily test role-based views and the **Maker-Checker** resolution flow without tedious login/logout steps, we will implement a User Switcher dropdown in the top navbar.
+> - **Local AI Fallback**: If `GROQ_API_KEY` is not provided in `.env`, the FastAPI AI service will use a smart rule-based exception analyzer to construct high-fidelity exception summaries, preventing empty panels.
+
+## Proposed Changes
+
+---
+
+### Backend Service (Django)
+
+#### [MODIFY] [requirements.txt](file:///d:/git/exceptioniq/backend/requirements.txt)
+- Add `django-cors-headers==4.4.0` for frontend-backend communication.
+
+#### [MODIFY] [settings.py](file:///d:/git/exceptioniq/backend/config/settings.py)
+- Register `corsheaders` in `INSTALLED_APPS` and middleware.
+- Configure `CORS_ALLOW_ALL_ORIGINS = True` to enable Vite requests from `localhost:5173`.
+
+#### [NEW] [seed_db.py](file:///d:/git/exceptioniq/backend/apps/common/management/commands/seed_db.py)
+- Custom Django command to seed default entity, users (admin, analyst, approver, manager), and standard routing rules.
+
+#### [MODIFY] [views.py](file:///d:/git/exceptioniq/backend/apps/api/views.py)
+- Implement `approve`, `reject`, and `reassign` actions in `ExceptionViewSet`.
+- Implement `ai_summary` action in `ExceptionViewSet` that queries the FastAPI AI service.
+- Add `bank/clear` action in `ReconciliationViewSet` to reset database records for clean testing.
+
+#### [MODIFY] [services.py](file:///d:/git/exceptioniq/backend/apps/api/services.py)
+- Improve routing to ensure exceptions are correctly assigned and SLA dates are calculated.
+
+---
+
+### AI Service (FastAPI)
+
+#### [MODIFY] [main.py](file:///d:/git/exceptioniq/ai_service/main.py)
+- Add FastAPI CORS Middleware to allow document parsing from the React frontend.
+- Implement smart rule-based local fallback in `/summarize-exception` when no Groq key is present.
+
+---
+
+### Frontend Service (React)
+
+#### [NEW] [index.css](file:///d:/git/exceptioniq/frontend/src/index.css)
+- Implement a premium, dark-mode/glassmorphic responsive CSS design system with custom properties, Outfit font, smooth transitions, card layouts, status chips, and table designs.
+
+#### [MODIFY] [main.tsx](file:///d:/git/exceptioniq/frontend/src/main.tsx)
+- Import `index.css`.
+
+#### [MODIFY] [App.tsx](file:///d:/git/exceptioniq/frontend/src/App.tsx)
+- Replace basic list table with a high-fidelity application including:
+  1. **Top Navbar**: Entity selector, Role/User selector, Health badge, and database "Reset" button.
+  2. **Sidebar Navigation**: Dashboard, Exception Queue, Ingestion/Upload, Routing Rules.
+  3. **Dashboard View**: Key stats (Open, Resolved, Breached, High severity) and CSS-based distribution chart.
+  4. **Exception Queue View**: Filterable list by status/severity/code, search bar, severity chips, and live SLA countdown.
+  5. **Exception Detail Modal**: Side-by-side transaction mismatch preview (Bank vs Ledger), AI Insights tab (invoking FastAPI summaries), activity/audit logs, comment box, Analyst resolution panel, and Approver/Manager Maker-Checker approval panel.
+  6. **Ingestion View**: File uploading for Statement/Ledger CSVs, Trigger matching button, and PDF-to-Markdown invoice/statement drag-and-drop.
+  7. **Routing Rules View**: List of rules and simplified rule adder.
+
+---
+
+### Infrastructure & Configuration
+
+#### [MODIFY] [docker-compose.yml](file:///d:/git/exceptioniq/docker-compose.yml)
+- Change `backend` startup command to: `sh -c "python manage.py makemigrations users entities reconciliation exceptions_app routing && python manage.py migrate && python manage.py seed_db && python manage.py runserver 0.0.0.0:8000"`.
+- Use `.env` file for docker configuration variables.
+
+#### [NEW] [.env](file:///d:/git/exceptioniq/.env)
+- Environment file template containing `DATABASE_URL`, `DEBUG`, `SECRET_KEY`, `AI_SERVICE_URL`, and placeholder for `GROQ_API_KEY`.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run database migrations and seeder inside containers to confirm schema integrity.
+- Run frontend build: `npm run build` inside `frontend/` directory to ensure TSX compilation passes.
+
+### Manual Verification
+1. Launch containers using `docker compose up --build`.
+2. Open `http://localhost:5173` in the browser.
+3. Verify that the health badge shows **Live** and the entity is defaulted to **Acme Corporation**.
+4. Check **Ingestion** tab: Upload `sample_bank_ledger.csv` and `sample_bank_statement.csv` (located in the `scripts` folder).
+5. Click **Run Reconciliation Matching** and verify that 3 exceptions are created:
+   - `BANK-AMT` (Vendor B invoice INV200 has ₹2,100 vs ₹2,000)
+   - `BANK-MISS-LEDGER` (Vendor D invoice INV400 is in Statement but missing in Ledger)
+   - `BANK-MISS-BANK` (Vendor C invoice INV300 is in Ledger but missing in Statement)
+6. Switch user roles to test:
+   - **Analyst**: Go to exception queue, investigate `BANK-AMT`. Click **Ask AI** to get the insights summary. Comment on it. Type resolution details and submit **Resolve**. Verify the status transitions to `resolved`.
+   - **Approver/Manager**: Open the resolved exception. Review the **Maker-Checker** panel. Click **Approve & Close** or **Reject**. Confirm the status changes to `closed` or re-opens.
+7. Verify that the **Dashboard** metrics cards reflect active, resolved, and breached exceptions properly.
+8. Add a new routing rule in the **Routing Rules** tab and confirm it appears in the list.
+9. Click **Reset Database** at the top right to verify data clearance.

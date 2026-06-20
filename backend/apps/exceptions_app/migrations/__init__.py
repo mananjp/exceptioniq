@@ -1,0 +1,1 @@
+# exceptions_app migrations
