@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { client } from '../api/client'
-import { ExceptionRecord, User, AuditLog } from '../types'
+import { ExceptionRecord, User, AuditLog, Vendor } from '../types'
 import StatusChip from '../components/StatusChip'
 import SeverityBadge from '../components/SeverityBadge'
 import SlaCountdown from '../components/SlaCountdown'
@@ -82,14 +82,56 @@ export default function ExceptionDetail() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiLoaded, setAiLoaded] = useState(false)
 
+  const [matchedVendor, setMatchedVendor] = useState<Vendor | null>(null)
+
+  const getRiskBadge = (level: string) => {
+    switch (level) {
+      case 'red':
+        return <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>🔴 High Risk</span>
+      case 'amber':
+        return <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>🟡 Medium Risk</span>
+      case 'green':
+      default:
+        return <span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>🟢 Low Risk</span>
+    }
+  }
+
+  const renderCounterparty = (name?: string) => {
+    const display = name || 'N/A'
+    if (!name || !matchedVendor?.risk_score) {
+      return display
+    }
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <span>{display}</span>
+        {getRiskBadge(matchedVendor.risk_score.risk_level)}
+      </span>
+    )
+  }
+
   // Fetch exception detail and users
   const fetchData = async () => {
     if (!id) return
     setLoading(true)
     setError('')
+    setMatchedVendor(null)
     try {
       const data = await client.get(`/exceptions/${id}/`)
       setException(data)
+
+      const counterparty = data.context?.counterparty?.trim()
+      if (counterparty && data.entity) {
+        try {
+          const vendorsRes = await client.get(`/vendors/?entity=${data.entity}`)
+          const vendors: Vendor[] = vendorsRes.results || vendorsRes || []
+          const match = vendors.find(
+            (v) => v.name.toLowerCase().trim() === counterparty.toLowerCase()
+          )
+          setMatchedVendor(match || null)
+        } catch {
+          setMatchedVendor(null)
+        }
+      }
       
       const usersData = await client.get('/users/')
       setUsers(Array.isArray(usersData) ? usersData : usersData.results || [])
@@ -261,7 +303,7 @@ export default function ExceptionDetail() {
                     </div>
                     <div className="comparison-row">
                       <span className="comparison-row-label">Counterparty</span>
-                      <span className="comparison-row-value">{exception.context.counterparty || 'N/A'}</span>
+                      <span className="comparison-row-value">{renderCounterparty(exception.context.counterparty)}</span>
                     </div>
                     <div className="comparison-row">
                       <span className="comparison-row-label">Narration</span>
@@ -302,7 +344,7 @@ export default function ExceptionDetail() {
                     </div>
                     <div className="comparison-row">
                       <span className="comparison-row-label">Counterparty</span>
-                      <span className="comparison-row-value">{exception.context.counterparty || 'N/A'}</span>
+                      <span className="comparison-row-value">{renderCounterparty(exception.context.counterparty)}</span>
                     </div>
                     <div className="comparison-row">
                       <span className="comparison-row-label">Account Ledger</span>
@@ -457,6 +499,27 @@ export default function ExceptionDetail() {
 
         {/* Right Side */}
         <div>
+          {matchedVendor?.risk_score && (
+            <div className="card" style={{ marginBottom: '20px' }}>
+              <h3 style={{ marginBottom: '8px' }}>Vendor Risk Profile</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 600, fontSize: '14px' }}>{matchedVendor.name}</span>
+                {getRiskBadge(matchedVendor.risk_score.risk_level)}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'grid', gap: '4px' }}>
+                <span>Score: <strong>{matchedVendor.risk_score.score}/100</strong></span>
+                <span>Exceptions (90d): <strong>{matchedVendor.risk_score.exception_count_90d}</strong></span>
+                <span>Amount at risk: <strong>₹{parseFloat(matchedVendor.risk_score.amount_at_risk).toLocaleString('en-IN')}</strong></span>
+                {matchedVendor.payment_blocked && (
+                  <span style={{ color: '#dc2626', fontWeight: 600 }}>⚠️ Payment release blocked</span>
+                )}
+              </div>
+              <Link to="/vendors" style={{ display: 'inline-block', marginTop: '10px', fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>
+                View vendor ledger →
+              </Link>
+            </div>
+          )}
+
           {/* Reassign Panel (Only for admin or manager) */}
           {(currentUserRole === 'admin' || currentUserRole === 'manager') && (
             <div className="card" style={{ marginBottom: '20px' }}>

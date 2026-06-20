@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { client } from '../../api/client'
-import { ExceptionRecord } from '../../types'
+import { ExceptionRecord, MonthEndPeriod } from '../../types'
 import StatusChip from '../../components/StatusChip'
 import SeverityBadge from '../../components/SeverityBadge'
 
@@ -13,6 +13,7 @@ interface Props {
 export default function ViewerDashboard({ entityId, user }: Props) {
   const [exceptions, setExceptions] = useState<ExceptionRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [latestClosePeriod, setLatestClosePeriod] = useState<MonthEndPeriod | null>(null)
 
   const fetchData = async () => {
     if (!entityId) return
@@ -20,6 +21,16 @@ export default function ViewerDashboard({ entityId, user }: Props) {
     try {
       const data = await client.get(`/exceptions/?entity=${entityId}`)
       setExceptions(Array.isArray(data) ? data : data.results || [])
+
+      // Fetch close periods
+      const closePeriods = await client.get(`/close/?entity=${entityId}`)
+      const periodsList = Array.isArray(closePeriods) ? closePeriods : closePeriods.results || []
+      if (periodsList.length > 0) {
+        const detail = await client.get(`/close/${periodsList[0].id}/`)
+        setLatestClosePeriod(detail)
+      } else {
+        setLatestClosePeriod(null)
+      }
     } catch (err) {
       console.error('Failed to load viewer dashboard', err)
     } finally {
@@ -46,6 +57,51 @@ export default function ViewerDashboard({ entityId, user }: Props) {
         <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text)' }}>Welcome, {user.first_name || user.username} 👁️</h1>
         <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', marginTop: '4px' }}>Read-only reconciliation viewer workspace.</p>
       </div>
+
+      {/* Month-End Close Status Banner */}
+      {latestClosePeriod && (
+        <div style={{
+          background: latestClosePeriod.status === 'closed' ? '#f0fdf4' : '#eff6ff',
+          border: `1px solid ${latestClosePeriod.status === 'closed' ? '#bbf7d0' : '#bfdbfe'}`,
+          borderRadius: '8px',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>{latestClosePeriod.status === 'closed' ? '✅' : '📅'}</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '14px', color: latestClosePeriod.status === 'closed' ? '#166534' : '#1e40af' }}>
+                Month-End Close ({latestClosePeriod.period}): {latestClosePeriod.status === 'closed' ? 'Period Closed' : latestClosePeriod.status === 'in_progress' ? 'In Progress' : 'Open'}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                {latestClosePeriod.status === 'closed'
+                  ? `Closed by ${latestClosePeriod.closed_by?.username || 'System'} on ${new Date(latestClosePeriod.closed_at || '').toLocaleDateString()}`
+                  : `${latestClosePeriod.items?.filter(it => it.is_complete).length || 0} of ${latestClosePeriod.items?.length || 0} checklist items completed`
+                }
+              </div>
+            </div>
+          </div>
+
+          {latestClosePeriod.status !== 'closed' && latestClosePeriod.items && latestClosePeriod.items.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '180px' }}>
+              <div style={{ flex: 1, height: '6px', background: '#cbd5e1', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${(latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100}%`,
+                  height: '100%',
+                  background: '#3b82f6',
+                  borderRadius: '3px',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap' }}>
+                {Math.round((latestClosePeriod.items.filter(it => it.is_complete).length / latestClosePeriod.items.length) * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid-3">

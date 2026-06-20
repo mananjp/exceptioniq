@@ -41,6 +41,8 @@ ROLE_ACTION_MAP = {
     'tally_sync':             {'admin', 'manager'},
     'zoho_sync':              {'admin', 'manager'},
     'zoho_connect':           {'admin'},
+    'zoho_callback':          {'*'},
+    'zoho_disconnect':        {'admin'},
 }
 
 class RolePermission(BasePermission):
@@ -52,4 +54,4 @@ class RolePermission(BasePermission):
         if action in ('list', 'retrieve', None):
             return True
         allowed = ROLE_ACTION_MAP.get(action, {'admin'})
-        return role in allowed
+        return role in allowed or '*' in allowed
