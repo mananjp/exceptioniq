@@ -5,7 +5,7 @@ import Navbar from './components/Navbar'
 import { useAuth } from './context/AuthContext'
 
 export default function App() {
-  const { user, loading } = useAuth()
+  const { user, loading, hasOrg } = useAuth()
   const [entityId, setEntityId] = useState<string>(() => localStorage.getItem('selectedEntityId') || '')
 
   useEffect(() => {
@@ -23,7 +23,11 @@ export default function App() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/" replace />
+  }
+
+  if (!hasOrg) {
+    return <Navigate to="/org/setup" replace />
   }
 
   return (

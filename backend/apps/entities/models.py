@@ -11,6 +11,13 @@ class Entity(TimeStampedModel):
     zoho_access_token = models.TextField(blank=True)
     zoho_refresh_token = models.TextField(blank=True)
     zoho_token_expiry = models.DateTimeField(null=True, blank=True)
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='entities'
+    )
 
     def __str__(self):
         return self.name

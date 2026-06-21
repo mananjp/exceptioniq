@@ -85,26 +85,33 @@ export default function Navbar({
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>Active Entity:</label>
-        {entities.length > 0 ? (
-          <select 
-            value={entityId} 
-            onChange={(e) => setEntityId(e.target.value)} 
-            className="entity-selector"
-          >
-            {entities.map(ent => (
-              <option key={ent.id} value={ent.id}>{ent.name}</option>
-            ))}
-          </select>
-        ) : (
-          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Loading entities...</span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {user?.organization_name && (
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+              {user.organization_name}
+            </span>
+          )}
+          <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>Entity:</label>
+          {entities.length > 0 ? (
+            <select 
+              value={entityId} 
+              onChange={(e) => setEntityId(e.target.value)} 
+              className="entity-selector"
+            >
+              {entities.map(ent => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>No entities</span>
+          )}
+        </div>
       </div>
 
       <div className="navbar-right">
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', borderRight: '1px solid var(--color-border)', paddingRight: '16px', marginRight: '8px' }}>
-            <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>👤 @{user.username}</span>
+            <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>@{user.username}</span>
             <span style={{
               fontSize: '10px',
               background: '#eff6ff',
@@ -141,10 +148,10 @@ export default function Navbar({
               onChange={(e) => handleRoleChange(e.target.value)}
               className="user-switcher"
             >
-              <option value="admin">🔑 Admin</option>
-              <option value="analyst">💼 Analyst</option>
-              <option value="approver">✍️ Approver</option>
-              <option value="manager">📈 Manager</option>
+              <option value="admin">Admin</option>
+              <option value="analyst">Analyst</option>
+              <option value="approver">Approver</option>
+              <option value="manager">Manager</option>
             </select>
 
             <button 
@@ -153,7 +160,7 @@ export default function Navbar({
               style={{ padding: '6px 12px', fontSize: '12px', borderColor: '#fca5a5', color: '#b91c1c', background: '#fef2f2' }}
               disabled={resetting || !entityId}
             >
-              {resetting ? 'Resetting...' : '⚠️ Reset DB'}
+              {resetting ? 'Resetting...' : 'Reset DB'}
             </button>
           </div>
         )}

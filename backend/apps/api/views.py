@@ -26,6 +26,46 @@ User = get_user_model()
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def auth_register(request):
+    username = request.data.get('username', '').strip()
+    password = request.data.get('password', '')
+    email = request.data.get('email', '').strip()
+    role = request.data.get('role', 'viewer')
+    first_name = request.data.get('first_name', '').strip()
+    last_name = request.data.get('last_name', '').strip()
+
+    if not username or not password:
+        return Response({'error': 'Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+    if len(password) < 4:
+        return Response({'error': 'Password must be at least 4 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+    if role not in dict(User.ROLE_CHOICES):
+        return Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        email=email,
+        role=role,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    login(request, user)
+    return Response({
+        'id': str(user.id),
+        'username': user.username,
+        'email': user.email,
+        'role': user.role,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'organization': None,
+        'organization_name': None,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def auth_login(request):
     username = request.data.get('username')
     password = request.data.get('password')
@@ -39,6 +79,8 @@ def auth_login(request):
             'role': user.role,
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'organization': str(user.organization.id) if user.organization else None,
+            'organization_name': user.organization.name if user.organization else None,
         })
     return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -58,12 +100,19 @@ def me(request):
         'role': request.user.role,
         'first_name': request.user.first_name,
         'last_name': request.user.last_name,
+        'organization': str(request.user.organization.id) if request.user.organization else None,
+        'organization_name': request.user.organization.name if request.user.organization else None,
     })
 
 class EntityViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission]
-    queryset = Entity.objects.all().order_by('name')
     serializer_class = EntitySerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.organization:
+            return Entity.objects.filter(organization=user.organization).order_by('name')
+        return Entity.objects.none()
 
 class RoutingRuleViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission]
