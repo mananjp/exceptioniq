@@ -8,4 +8,5 @@ urlpatterns = [
     path('members/', views.list_members, name='org-members'),
     path('invites/', views.list_invites, name='org-invites'),
     path('info/', views.org_info, name='org-info'),
+    path('invite/<uuid:invite_id>/', views.delete_invite, name='org-delete-invite'),
 ]

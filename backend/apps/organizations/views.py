@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Organization, InviteCode
+from apps.entities.models import Entity
 from .serializers import (
     OrganizationSerializer, InviteCodeSerializer,
     InviteCodeGenerateSerializer, JoinOrgSerializer,
@@ -40,6 +41,7 @@ def create_org(request):
 
     with transaction.atomic():
         org = Organization.objects.create(name=name, code=code, created_by=user)
+        Entity.objects.create(name=name, code=code, organization=org)
         user.organization = org
         user.save(update_fields=['organization'])
 
@@ -139,3 +141,19 @@ def org_info(request):
     if not user.organization:
         return Response({'organization': None})
     return Response(OrganizationSerializer(user.organization).data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_invite(request, invite_id):
+    user = request.user
+    if user.role != 'manager':
+        return Response({'error': 'Only managers can delete invites.'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        invite = InviteCode.objects.get(id=invite_id, organization=user.organization)
+        if invite.is_used:
+            return Response({'error': 'Cannot delete a used invite code.'}, status=status.HTTP_400_BAD_REQUEST)
+        invite.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except InviteCode.DoesNotExist:
+        return Response({'error': 'Invite code not found.'}, status=status.HTTP_404_NOT_FOUND)

@@ -29,6 +29,7 @@ export default function OrgSettings() {
   const [inviteHours, setInviteHours] = useState(72)
   const [generating, setGenerating] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -89,6 +90,20 @@ export default function OrgSettings() {
       setCopiedId(id)
     } catch {
       setError('Failed to copy to clipboard')
+    }
+  }
+
+  const handleRevoke = async (id: string) => {
+    if (!window.confirm('Revoke this invite code? It cannot be used after revocation.')) return
+    setDeletingId(id)
+    try {
+      await client.delete(`/org/invite/${id}/`)
+      setInvites((prev) => prev.filter((inv) => inv.id !== id))
+      setSuccess('Invite code revoked.')
+    } catch (err: any) {
+      setError(err.message || 'Failed to revoke invite')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -191,6 +206,7 @@ export default function OrgSettings() {
                   <th style={{ padding: '10px 16px', textAlign: 'center' }}>Status</th>
                   <th style={{ padding: '10px 16px', textAlign: 'left' }}>Expires</th>
                   <th style={{ padding: '10px 16px', textAlign: 'center' }}>Copy</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'center' }}>Revoke</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,6 +240,19 @@ export default function OrgSettings() {
                         disabled={inv.is_used}
                       >
                         {copiedId === inv.id ? 'Copied!' : 'Copy'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleRevoke(inv.id)}
+                        style={{
+                          padding: '4px 10px', fontSize: 11, minWidth: 50,
+                          background: 'none', border: '1px solid #fca5a5', borderRadius: 4,
+                          color: '#dc2626', cursor: 'pointer',
+                        }}
+                        disabled={inv.is_used || deletingId === inv.id}
+                      >
+                        {deletingId === inv.id ? '...' : 'Revoke'}
                       </button>
                     </td>
                   </tr>

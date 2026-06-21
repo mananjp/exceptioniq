@@ -61,6 +61,8 @@ class Command(BaseCommand):
                 'created_by': users.get('manager'),
             }
         )
+        entity.organization = org
+        entity.save(update_fields=['organization'])
         for user in users.values():
             if not user.organization:
                 user.organization = org

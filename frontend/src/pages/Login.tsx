@@ -41,19 +41,6 @@ export default function Login() {
     }
   }
 
-  const handleQuickLogin = async (role: string) => {
-    setLoading(true)
-    setError('')
-    try {
-      const userData = await login(role, role)
-      redirectAfterLogin(userData)
-    } catch (err: any) {
-      setError(err.message || `Quick login failed for ${role}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div style={{
       display: 'flex',
@@ -169,47 +156,23 @@ export default function Login() {
         </form>
 
         <div style={{
-          marginTop: 28,
-          borderTop: '1px solid #e5e7eb',
-          paddingTop: 20,
+          marginTop: 20,
+          padding: '12px 14px',
+          background: '#f8fafc',
+          borderRadius: 6,
+          border: '1px solid #e2e8f0',
+          fontSize: 12,
+          color: '#475569',
+          lineHeight: 1.5,
         }}>
-          <div style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: '#6b7280',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            marginBottom: 10,
-            textAlign: 'center',
-          }}>
-            Demo accounts
-          </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 6,
-          }}>
-            {['admin', 'manager', 'approver', 'analyst'].map((role) => (
-              <button
-                key={role}
-                onClick={() => handleQuickLogin(role)}
-                style={{
-                  padding: '7px 0',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: '#fff',
-                  color: '#374151',
-                  border: '1px solid #d1d5db',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize',
-                }}
-                disabled={loading}
-              >
-                {role}
-              </button>
-            ))}
-          </div>
+          <strong style={{ color: '#1e293b' }}>New to ExceptionIQ?</strong><br />
+          Managers create an organization first, then invite team members via invite codes.
+          If you have an invite code, sign in and you can join your organization.
+        </div>
+
+        <div style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: '#6b7280' }}>
+          No account?{' '}
+          <Link to="/register" style={{ fontWeight: 600 }}>Create one</Link>
         </div>
       </div>
     </div>

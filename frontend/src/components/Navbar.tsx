@@ -85,20 +85,27 @@ export default function Navbar({
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>Active Entity:</label>
-        {entities.length > 0 ? (
-          <select 
-            value={entityId} 
-            onChange={(e) => setEntityId(e.target.value)} 
-            className="entity-selector"
-          >
-            {entities.map(ent => (
-              <option key={ent.id} value={ent.id}>{ent.name}</option>
-            ))}
-          </select>
-        ) : (
-          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Loading entities...</span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {user?.organization_name && (
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+              {user.organization_name}
+            </span>
+          )}
+          <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>Entity:</label>
+          {entities.length > 0 ? (
+            <select 
+              value={entityId} 
+              onChange={(e) => setEntityId(e.target.value)} 
+              className="entity-selector"
+            >
+              {entities.map(ent => (
+                <option key={ent.id} value={ent.id}>{ent.name}</option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>No entities</span>
+          )}
+        </div>
       </div>
 
       <div className="navbar-right">

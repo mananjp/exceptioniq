@@ -2,7 +2,8 @@ from rest_framework.routers import DefaultRouter
 from django.urls import path, include
 from .views import (
     EntityViewSet, RoutingRuleViewSet, ExceptionViewSet,
-    ReconciliationViewSet, UserViewSet, health, auth_login, auth_logout, me
+    ReconciliationViewSet, UserViewSet, health,
+    auth_register, auth_login, auth_logout, me
 )
 import apps.organizations.views as org_views
 from apps.gst.views import GSTViewSet
@@ -29,6 +30,7 @@ router.register('integrations', IntegrationsViewSet, basename='integrations')
 
 urlpatterns = [
     path('health/', health),
+    path('auth/register/', auth_register, name='auth-register'),
     path('auth/login/', auth_login, name='auth-login'),
     path('auth/logout/', auth_logout, name='auth-logout'),
     path('auth/me/', me, name='auth-me'),
