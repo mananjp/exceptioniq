@@ -46,7 +46,26 @@ services:
       - key: AI_SERVICE_URL
         value: ""
       - key: FRONTEND_ORIGIN
-        value: ""
+        value: "https://exceptioniq.onrender.com"
+
+  # --- React Frontend (Static Site) ---
+  - type: static-site
+    name: exceptioniq-frontend
+    region: singapore
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: "https://exceptioniq-backend.onrender.com"
+    headers:
+      - source: /*
+        headers:
+          - key: X-Frame-Options
+            value: DENY
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
   # --- FastAPI AI Service ---
   - type: web
